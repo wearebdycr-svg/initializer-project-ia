@@ -544,9 +544,216 @@ def resolve_destination_path(raw_path: str) -> Path:
     return DOCUMENTS_DIR / candidate
 
 
+def _expand_and_find_binary(binary_name: str) -> Optional[Path]:
+    """Busca un ejecutable en las rutas estándar del sistema y en directorios comunes específicos de gestores de versiones."""
+    # 1. Búsqueda directa en el PATH actual
+    found = shutil.which(binary_name)
+    if found:
+        return Path(found)
+    
+    # 2. Rutas comunes en macOS/Linux y gestores de versiones
+    search_dirs = [
+        Path("/opt/homebrew/bin"),
+        Path("/usr/local/bin"),
+        Path("/usr/bin"),
+        Path("/bin"),
+        Path("/usr/sbin"),
+        Path("/sbin"),
+        Path.home() / ".local/bin",
+        Path.home() / ".yarn/bin",
+        Path.home() / ".config/yarn/global/node_modules/.bin",
+    ]
+    
+    # Rutas típicas de Flutter
+    search_dirs.extend([
+        Path.home() / "development/flutter/bin",
+        Path.home() / "flutter/bin",
+        Path.home() / "opt/flutter/bin",
+        Path("/opt/flutter/bin"),
+    ])
+    
+    # Directorios de NVM (Node Version Manager)
+    try:
+        nvm_node_dirs = Path.home().glob(".nvm/versions/node/*/bin")
+        search_dirs.extend(nvm_node_dirs)
+    except Exception:
+        pass
+
+    # Directorios de FNM (Fast Node Manager)
+    try:
+        fnm_dirs = Path.home().glob(".local/share/fnm/node-versions/*/installation/bin")
+        search_dirs.extend(fnm_dirs)
+        fnm_dirs_alt = Path.home().glob(".fnm/node-versions/*/installation/bin")
+        search_dirs.extend(fnm_dirs_alt)
+    except Exception:
+        pass
+        
+    # Directorios de ASDF
+    try:
+        asdf_dirs = Path.home().glob(".asdf/installs/nodejs/*/bin")
+        search_dirs.extend(asdf_dirs)
+        search_dirs.append(Path.home() / ".asdf/shims")
+    except Exception:
+        pass
+
+    # Directorios de Volta
+    search_dirs.append(Path.home() / ".volta/bin")
+    
+    # Rutas comunes en Windows
+    if os.name == 'nt':
+        app_data = os.environ.get("APPDATA")
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        program_files = os.environ.get("ProgramFiles")
+        program_files_x86 = os.environ.get("ProgramFiles(x86)")
+        
+        if app_data:
+            search_dirs.append(Path(app_data) / "npm")
+        if local_app_data:
+            search_dirs.append(Path(local_app_data) / "Programs/pnpm")
+            search_dirs.append(Path(local_app_data) / "fnm")
+        if program_files:
+            search_dirs.append(Path(program_files) / "nodejs")
+            search_dirs.append(Path(program_files) / "Git/cmd")
+        if program_files_x86:
+            search_dirs.append(Path(program_files_x86) / "nodejs")
+
+    # De-duplicar rutas manteniendo el orden
+    seen = set()
+    unique_dirs = []
+    for d in search_dirs:
+        try:
+            resolved = d.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                unique_dirs.append(resolved)
+        except Exception:
+            if d not in seen:
+                seen.add(d)
+                unique_dirs.append(d)
+
+    # Verificar existencia del ejecutable en cada ruta
+    for directory in unique_dirs:
+        if directory.exists() and directory.is_dir():
+            exts = ["", ".cmd", ".exe", ".bat"] if os.name == "nt" else [""]
+            for ext in exts:
+                candidate = directory / f"{binary_name}{ext}"
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    return candidate
+                    
+    return None
+
+
 def check_missing_binaries(binaries: list) -> list:
-    """Verifica qué gestores de paquetes/herramientas requeridas no están disponibles en el sistema."""
-    return [binary for binary in binaries if shutil.which(binary) is None]
+    """Verifica qué gestores de paquetes/herramientas requeridas no están disponibles en el sistema y expande el PATH si las localiza."""
+    missing = []
+    for binary in binaries:
+        found_path = _expand_and_find_binary(binary)
+        if found_path:
+            # Si se encontró el binario en una ruta que no está en el PATH, la agregamos
+            parent_str = str(found_path.parent)
+            current_path = os.environ.get("PATH", "")
+            paths = current_path.split(os.pathsep)
+            if parent_str not in paths:
+                os.environ["PATH"] = os.pathsep.join([parent_str] + paths)
+        else:
+            missing.append(binary)
+    return missing
+
+
+def attempt_auto_install(binary: str) -> bool:
+    """Intenta instalar automáticamente la herramienta faltante si es posible usando gestores de paquetes del sistema."""
+    import sys
+    
+    is_mac = sys.platform == "darwin"
+    is_linux = sys.platform.startswith("linux")
+    is_windows = os.name == "nt"
+    
+    if is_mac:
+        # Buscar la ruta de Homebrew
+        brew_path = _expand_and_find_binary("brew")
+        if not brew_path:
+            return False
+        
+        brew_packages = {
+            "node": ["node"],
+            "npm": ["node"],  # npm se instala junto con node
+            "gradle": ["gradle"],
+            "pod": ["cocoapods"],
+            "flutter": ["--cask", "flutter"]
+        }
+        
+        pkgs = brew_packages.get(binary.lower())
+        if not pkgs:
+            return False
+            
+        try:
+            result = subprocess.run(
+                [str(brew_path), "install"] + pkgs,
+                capture_output=True,
+                text=True,
+                timeout=600
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+            
+    elif is_linux:
+        apt_packages = {
+            "node": ["nodejs", "npm"],
+            "npm": ["nodejs", "npm"],
+            "gradle": ["gradle"],
+        }
+        
+        pkgs = apt_packages.get(binary.lower())
+        if not pkgs:
+            return False
+            
+        for base_cmd in [["apt-get", "install", "-y"], ["sudo", "apt-get", "install", "-y"]]:
+            try:
+                if shutil.which(base_cmd[0]) is None:
+                    continue
+                result = subprocess.run(
+                    base_cmd + pkgs,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        return False
+        
+    elif is_windows:
+        winget_path = shutil.which("winget")
+        if not winget_path:
+            return False
+            
+        winget_packages = {
+            "node": ["OpenJS.NodeJS"],
+            "npm": ["OpenJS.NodeJS"],
+            "gradle": ["Gradle.Gradle"],
+        }
+        
+        pkgs = winget_packages.get(binary.lower())
+        if not pkgs:
+            return False
+            
+        for pkg in pkgs:
+            try:
+                result = subprocess.run(
+                    [winget_path, "install", pkg, "--silent", "--accept-source-agreements", "--accept-package-agreements"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600
+                )
+                if result.returncode != 0:
+                    return False
+            except Exception:
+                return False
+        return True
+        
+    return False
 
 
 def _derive_placeholders(project_name: str) -> dict:

@@ -222,6 +222,15 @@ if st.session_state.chat_step == "review":
             missing = check_missing_binaries(stack["binaries"])
 
         if missing:
+            from agent_project_initializer import attempt_auto_install
+            for binary in list(missing):
+                with st.spinner(f"Intentando instalar automáticamente la herramienta faltante: {binary}..."):
+                    attempt_auto_install(binary)
+            
+            with st.spinner("Revalidando herramientas instaladas..."):
+                missing = check_missing_binaries(stack["binaries"])
+
+        if missing:
             error_msg = (
                 f"❌ No se encontraron en el sistema las siguientes herramientas requeridas: "
                 f"**{', '.join(missing)}**. Instálalas y presiona nuevamente 'Aprobar e instalar'."
