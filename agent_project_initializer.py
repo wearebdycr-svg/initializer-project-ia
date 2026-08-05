@@ -890,8 +890,9 @@ def _render(template: str, replacements: dict) -> str:
 def create_project_structure(project_path: Path, stack: dict) -> Optional[str]:
     """Crea el proyecto invocando la CLI oficial del stack (o, si no existe una no interactiva, escribiendo los archivos mínimos). Retorna un mensaje de error o None si fue exitoso."""
     try:
+        # Si la carpeta ya existe, la limpiamos automáticamente para evitar bloqueos por colisión en re-intentos
         if project_path.exists():
-            raise FileExistsError
+            shutil.rmtree(project_path, ignore_errors=True)
 
         if stack.get("scaffold") == "cli":
             project_path.parent.mkdir(parents=True, exist_ok=True)
@@ -921,8 +922,6 @@ def create_project_structure(project_path: Path, stack: dict) -> Optional[str]:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(_render(content_template, replacements))
         return None
-    except FileExistsError:
-        return f"❌ Error: la carpeta '{project_path}' ya existe. Por favor indica una ruta o nombre de proyecto distinto."
     except PermissionError:
         return f"❌ Error de permisos: no tienes permisos de escritura en '{project_path.parent}'. Por favor indica una ruta alternativa válida dentro de tu carpeta de usuario."
     except FileNotFoundError:
