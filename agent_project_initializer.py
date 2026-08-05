@@ -643,7 +643,7 @@ def _expand_and_find_binary(binary_name: str) -> Optional[Path]:
     return None
 
 
-def _ensure_minimum_node_version(min_major: int = 22) -> bool:
+def _ensure_minimum_node_version(min_major: int = 26) -> bool:
     """Verifica si la versión de Node.js es menor que min_major y, de ser así, descarga la versión portátil."""
     import sys
     import urllib.request
@@ -671,7 +671,8 @@ def _ensure_minimum_node_version(min_major: int = 22) -> bool:
 
     # 2. Si no cumple o no se encuentra, intentar descargar una versión portátil en Linux x64
     if sys.platform == "linux" and os.uname().machine == "x86_64":
-        version = f"v{min_major}.11.0"
+        # Determinamos la sub-versión exacta a descargar de forma segura
+        version = f"v{min_major}.6.0" if min_major == 26 else (f"v{min_major}.11.0" if min_major == 22 else f"v{min_major}.0.0")
         target_dir = Path.home() / ".local" / "share" / f"node-{version}"
         node_bin = target_dir / "bin" / "node"
         
@@ -725,9 +726,9 @@ def _ensure_minimum_node_version(min_major: int = 22) -> bool:
 
 def check_missing_binaries(binaries: list) -> list:
     """Verifica qué gestores de paquetes/herramientas requeridas no están disponibles en el sistema y expande el PATH si las localiza."""
-    # Si requiere node/npm, asegurar versión mínima de Node v22
+    # Si requiere node/npm, asegurar versión mínima de Node v26
     if "node" in binaries or "npm" in binaries:
-        _ensure_minimum_node_version(22)
+        _ensure_minimum_node_version(26)
 
     missing = []
     for binary in binaries:
