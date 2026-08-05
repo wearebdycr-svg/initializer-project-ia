@@ -643,8 +643,92 @@ def _expand_and_find_binary(binary_name: str) -> Optional[Path]:
     return None
 
 
+def _ensure_minimum_node_version(min_major: int = 22) -> bool:
+    """Verifica si la versión de Node.js es menor que min_major y, de ser así, descarga la versión portátil."""
+    import sys
+    import urllib.request
+    import tarfile
+    import tempfile
+
+    # 1. Intentar encontrar 'node' en el sistema
+    node_path = _expand_and_find_binary("node")
+    if node_path:
+        # Verificar versión
+        try:
+            result = subprocess.run(
+                [str(node_path), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                version_str = result.stdout.strip().lstrip("v")
+                parts = [int(x) for x in version_str.split(".") if x.isdigit()]
+                if parts and parts[0] >= min_major:
+                    return True  # La versión ya cumple con el mínimo
+        except Exception:
+            pass
+
+    # 2. Si no cumple o no se encuentra, intentar descargar una versión portátil en Linux x64
+    if sys.platform == "linux" and os.uname().machine == "x86_64":
+        version = f"v{min_major}.11.0"
+        target_dir = Path.home() / ".local" / "share" / f"node-{version}"
+        node_bin = target_dir / "bin" / "node"
+        
+        # Si ya está instalada la portátil, agregarla al PATH
+        if node_bin.is_file() and os.access(node_bin, os.X_OK):
+            bin_path = str(target_dir / "bin")
+            current_path = os.environ.get("PATH", "")
+            paths = current_path.split(os.pathsep)
+            if bin_path not in paths:
+                os.environ["PATH"] = os.pathsep.join([bin_path] + paths)
+            return True
+
+        # Descargar e instalar
+        try:
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            url = f"https://nodejs.org/dist/{version}/node-{version}-linux-x64.tar.xz"
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                archive_path = Path(tmpdir) / f"node-{version}.tar.xz"
+                urllib.request.urlretrieve(url, archive_path)
+                
+                # Intentar usar el comando 'tar' del sistema si está disponible
+                if shutil.which("tar"):
+                    subprocess.run(
+                        ["tar", "-xJf", str(archive_path), "-C", str(tmpdir)],
+                        check=True,
+                        capture_output=True
+                    )
+                else:
+                    with tarfile.open(archive_path, "r:xz") as tar:
+                        tar.extractall(path=tmpdir)
+                        
+                extracted_dir = Path(tmpdir) / f"node-{version}-linux-x64"
+                if extracted_dir.is_dir():
+                    if target_dir.exists():
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                    shutil.move(str(extracted_dir), str(target_dir))
+            
+            if node_bin.is_file() and os.access(node_bin, os.X_OK):
+                bin_path = str(target_dir / "bin")
+                current_path = os.environ.get("PATH", "")
+                paths = current_path.split(os.pathsep)
+                if bin_path not in paths:
+                    os.environ["PATH"] = os.pathsep.join([bin_path] + paths)
+                return True
+        except Exception:
+            pass
+            
+    return False
+
+
 def check_missing_binaries(binaries: list) -> list:
     """Verifica qué gestores de paquetes/herramientas requeridas no están disponibles en el sistema y expande el PATH si las localiza."""
+    # Si requiere node/npm, asegurar versión mínima de Node v22
+    if "node" in binaries or "npm" in binaries:
+        _ensure_minimum_node_version(22)
+
     missing = []
     for binary in binaries:
         found_path = _expand_and_find_binary(binary)
