@@ -536,12 +536,12 @@ def resolve_stack_choice(project_type: str, choice_text: str) -> Optional[dict]:
 
 
 def resolve_destination_path(raw_path: str) -> Path:
-    """Resuelve la ruta de destino ingresada por el usuario, anclándola siempre dentro de ~/Documents."""
+    """Resuelve la ruta de destino ingresada por el usuario, anclándola siempre dentro de ~/Desktop."""
     clean = raw_path.strip().strip('"')
     candidate = Path(clean).expanduser()
     if candidate.is_absolute():
         return candidate
-    return DOCUMENTS_DIR / candidate
+    return DESKTOP_DIR / candidate
 
 
 def _expand_and_find_binary(binary_name: str) -> Optional[Path]:
