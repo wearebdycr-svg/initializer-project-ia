@@ -23,8 +23,8 @@ try:
 except Exception:
     llm = None
 
-# Carpeta base donde se permite inicializar proyectos (Supuesto de la HU: acceso a ~/Documents)
-DOCUMENTS_DIR = Path.home() / "Documents"
+# Carpeta base donde se permite inicializar proyectos (Supuesto de la HU: acceso a ~/Desktop)
+DESKTOP_DIR = Path.home() / "Desktop"
 
 # Variables de entorno para forzar modo no interactivo en las CLIs de scaffolding invocadas
 SCAFFOLD_ENV_OVERRIDES = {

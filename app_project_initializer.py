@@ -8,7 +8,7 @@ if 'agent_project_initializer' in sys.modules:
     importlib.reload(sys.modules['agent_project_initializer'])
 
 from agent_project_initializer import (
-    DOCUMENTS_DIR,
+    DESKTOP_DIR,
     validate_mandatory_answer,
     normalize_project_type,
     resolve_stack_choice,
@@ -31,7 +31,7 @@ st.markdown(
     """
     **¡Bienvenido al asistente de inicialización de proyectos!**
     Te guiaré por una fase de descubrimiento (tipo de proyecto y stack), confirmaremos la ruta de destino
-    dentro de `~/Documents` y, antes de instalar cualquier dependencia, te pediré aprobación explícita
+    dentro de `~/Desktop` y, antes de instalar cualquier dependencia, te pediré aprobación explícita
     (**Human-in-the-loop**).
     """
 )
@@ -198,7 +198,7 @@ with st.sidebar:
     st.markdown("---")
     st.info(
         f"**Estado actual:**\nPaso: {st.session_state.chat_step.upper()}\n\n"
-        f"**Directorio base:**\n`{DOCUMENTS_DIR}`"
+        f"**Directorio base:**\n`{DESKTOP_DIR}`"
     )
 
     if st.button("Reiniciar Conversación 🔄", use_container_width=True):
@@ -250,7 +250,7 @@ if st.session_state.chat_step == "review":
             if structure_error:
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"{structure_error}\n\n**¿En qué carpeta dentro de 'Documents' deseas crear el proyecto?**"
+                    "content": f"{structure_error}\n\n**¿En qué carpeta dentro de 'Escritorio' deseas crear el proyecto?**"
                 })
                 st.session_state.chat_step = "path"
                 st.rerun()
@@ -338,7 +338,7 @@ if prompt := st.chat_input("Escribe tu respuesta aquí...", disabled=chat_disabl
                 st.session_state.stack = stack
                 response_text = (
                     f"Elegiste **{stack['name']}**. Ahora, ¿en qué carpeta dentro de tu directorio "
-                    f"**'Documents'** deseas crear el proyecto? (ej. `mi-proyecto`)"
+                    f"**'Escritorio'** deseas crear el proyecto? (ej. `mi-proyecto`)"
                 )
                 st.markdown(response_text)
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
