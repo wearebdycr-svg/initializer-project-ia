@@ -1,10 +1,11 @@
 import streamlit as st
 import os
+import sys
 import importlib
-import agent_project_initializer
 
-# Forzar la recarga del módulo para evitar el caché de importaciones de Streamlit
-importlib.reload(agent_project_initializer)
+# Forzar la recarga del módulo solo si ya fue importado previamente para evitar el caché de Streamlit sin fallar al inicio
+if 'agent_project_initializer' in sys.modules:
+    importlib.reload(sys.modules['agent_project_initializer'])
 
 from agent_project_initializer import (
     DOCUMENTS_DIR,
