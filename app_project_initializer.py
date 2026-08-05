@@ -287,6 +287,40 @@ if st.session_state.chat_step == "review":
         st.session_state.chat_step = "type"
         st.rerun()
 
+# Mostrar botón para descargar como ZIP de manera inmediata y permanente en el diseño de la página
+if st.session_state.chat_step == "done":
+    if st.session_state.destination_path:
+        import zipfile
+        import io
+        from pathlib import Path
+        dest_path = st.session_state.destination_path
+        if dest_path.exists() and dest_path.is_dir():
+            def make_zip(dir_path):
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for root, dirs, files in os.walk(dir_path):
+                        # Excluir carpetas pesadas para el ZIP
+                        dirs[:] = [d for d in dirs if d not in ("node_modules", "env", "venv", ".git")]
+                        for file in files:
+                            full_p = Path(root) / file
+                            rel_p = full_p.relative_to(dir_path)
+                            z.write(full_p, rel_p)
+                return buf.getvalue()
+                
+            try:
+                zip_bytes = make_zip(dest_path)
+                st.markdown("---")
+                st.success("📦 **¡Puedes descargar los archivos de tu proyecto completo directamente aquí!**")
+                st.download_button(
+                    label="📥 Descargar Proyecto como archivo ZIP",
+                    data=zip_bytes,
+                    file_name=f"{dest_path.name}.zip",
+                    mime="application/zip",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error al empaquetar el archivo ZIP: {str(e)}")
+
 # Entrada conversacional del usuario (deshabilitada si no hay ejecutor activo)
 chat_disabled = st.session_state.stack_advisor_executor is None
 if prompt := st.chat_input("Escribe tu respuesta aquí...", disabled=chat_disabled):
@@ -389,37 +423,5 @@ if prompt := st.chat_input("Escribe tu respuesta aquí...", disabled=chat_disabl
             st.markdown(info_msg)
             st.session_state.messages.append({"role": "assistant", "content": info_msg})
 
-        # Mostrar botón para descargar como ZIP
-        if st.session_state.destination_path:
-            import zipfile
-            import io
-            from pathlib import Path
-            dest_path = st.session_state.destination_path
-            if dest_path.exists() and dest_path.is_dir():
-                def make_zip(dir_path):
-                    buf = io.BytesIO()
-                    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-                        for root, dirs, files in os.walk(dir_path):
-                            # Excluir carpetas pesadas para el ZIP
-                            dirs[:] = [d for d in dirs if d not in ("node_modules", "env", "venv", ".git")]
-                            for file in files:
-                                full_p = Path(root) / file
-                                rel_p = full_p.relative_to(dir_path)
-                                z.write(full_p, rel_p)
-                    return buf.getvalue()
-                    
-                try:
-                    zip_bytes = make_zip(dest_path)
-                    st.markdown("---")
-                    st.success("📦 **¡Puedes descargar los archivos de tu proyecto completo directamente aquí!**")
-                    st.download_button(
-                        label="📥 Descargar Proyecto como archivo ZIP",
-                        data=zip_bytes,
-                        file_name=f"{dest_path.name}.zip",
-                        mime="application/zip",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"Error al empaquetar el archivo ZIP: {str(e)}")
 
 
